@@ -43,6 +43,6 @@ with DatabaseConnection('users.db') as conn:
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users")
     results = cursor.fetchall()
-    print("Users in the database:")
+    print("User in the database:")
     for row in results:
         print(row)
