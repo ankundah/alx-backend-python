@@ -7,6 +7,7 @@ from .models import Conversation, Message
 from .serializers import ConversationSerializer, MessageSerializer
 from django.contrib.auth import get_user_model
 from rest_framework.permissions import IsAuthenticated
+from django.shortcuts import get_object_or_404
 
 User = get_user_model()
 
@@ -67,17 +68,32 @@ class ConversationViewSet(viewsets.ModelViewSet):
 class MessageViewSet(viewsets.ModelViewSet):
     serializer_class = MessageSerializer
     permission_classes = [IsAuthenticated]
-    queryset = Message.objects.select_related('sender', 'conversation')
-    filter_backends = [filters.DjangoFilterBackend]
-    filterset_class = MessageFilter
 
     def get_queryset(self):
-        return self.queryset.filter(
+        # For nested route: /conversations/<id>/messages/
+        if 'conversation_pk' in self.kwargs:
+            return Message.objects.filter(
+                conversation_id=self.kwargs['conversation_pk'],
+                conversation__participants=self.request.user
+            ).order_by('-sent_at')
+        
+        # For flat route: /messages/
+        return Message.objects.filter(
             conversation__participants=self.request.user
         ).order_by('-sent_at')
 
     def perform_create(self, serializer):
-        conversation = serializer.validated_data['conversation']
-        if not conversation.participants.filter(id=self.request.user.id).exists():
-            raise PermissionDenied("You're not a participant in this conversation")
-        serializer.save(sender=self.request.user)
+        # Handle both nested and flat creation
+        if 'conversation_pk' in self.kwargs:
+            conversation_id = self.kwargs['conversation_pk']
+            conversation = get_object_or_404(
+                Conversation,
+                pk=conversation_id,
+                participants=self.request.user
+            )
+            serializer.save(conversation=conversation, sender=self.request.user)
+        else:
+            conversation = serializer.validated_data['conversation']
+            if not conversation.participants.filter(id=self.request.user.id).exists():
+                raise PermissionDenied("Not a conversation participant")
+            serializer.save(sender=self.request.user)
