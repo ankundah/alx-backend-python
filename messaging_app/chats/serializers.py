@@ -103,5 +103,5 @@ class ConversationSerializer(serializers.ModelSerializer):
 
     def validate_participant_emails(self, value):
         if len(value) < 1:
-            raise ValidationError("At least one participant is required")
+            raise serializers.ValidationError("At least one participant is required")
         return value
