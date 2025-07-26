@@ -8,10 +8,10 @@ from .serializers import ConversationSerializer, MessageSerializer
 from django.contrib.auth import get_user_model
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
+from .permissions import IsConversationParticipant  
 
 User = get_user_model()
 
-# Add these filter classes
 class ConversationFilter(filters.FilterSet):
     created_after = filters.DateTimeFilter(field_name='created_at', lookup_expr='gte')
     has_unread = filters.BooleanFilter(method='filter_has_unread')
@@ -34,61 +34,58 @@ class MessageFilter(filters.FilterSet):
         model = Message
         fields = ['conversation', 'sender']
 
-# Update the viewsets
 class ConversationViewSet(viewsets.ModelViewSet):
     serializer_class = ConversationSerializer
-    permission_classes = [IsAuthenticated]
-    queryset = Conversation.objects.prefetch_related('participants', 'messages')
+    permission_classes = [IsAuthenticated, IsConversationParticipant]  # Updated
     filter_backends = [filters.DjangoFilterBackend]
     filterset_class = ConversationFilter
 
     def get_queryset(self):
-        queryset = super().get_queryset()
-        return queryset.filter(participants=self.request.user).distinct()
+        return Conversation.objects.filter(
+            participants=self.request.user
+        ).prefetch_related('participants', 'messages').distinct()
+
+    def perform_create(self, serializer):
+        """Automatically add creator as participant"""
+        conversation = serializer.save()
+        conversation.participants.add(self.request.user)
 
     @action(detail=True, methods=['get'])
     def messages(self, request, pk=None):
+        """Get messages with nested filtering"""
         conversation = self.get_object()
-        messages = conversation.messages.all().order_by('sent_at')
-        
-        # Apply filtering to nested messages endpoint
-        filtered_messages = MessageFilter(
+        messages = MessageFilter(
             request.query_params,
-            queryset=messages
-        ).qs
+            queryset=conversation.messages.all()
+        ).qs.order_by('sent_at')
         
-        page = self.paginate_queryset(filtered_messages)
-        if page is not None:
-            serializer = MessageSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-            
-        serializer = MessageSerializer(filtered_messages, many=True)
-        return Response(serializer.data)
+        page = self.paginate_queryset(messages)
+        serializer = MessageSerializer(page if page is not None else messages, many=True)
+        return self.get_paginated_response(serializer.data) if page else Response(serializer.data)
 
 class MessageViewSet(viewsets.ModelViewSet):
     serializer_class = MessageSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsConversationParticipant]  # Updated
+    filter_backends = [filters.DjangoFilterBackend]
+    filterset_class = MessageFilter
 
     def get_queryset(self):
-        # For nested route: /conversations/<id>/messages/
-        if 'conversation_pk' in self.kwargs:
-            return Message.objects.filter(
-                conversation_id=self.kwargs['conversation_pk'],
-                conversation__participants=self.request.user
-            ).order_by('-sent_at')
-        
-        # For flat route: /messages/
-        return Message.objects.filter(
+        base_qs = Message.objects.filter(
             conversation__participants=self.request.user
-        ).order_by('-sent_at')
+        ).select_related('sender', 'conversation')
+        
+        if 'conversation_pk' in self.kwargs:
+            return base_qs.filter(
+                conversation_id=self.kwargs['conversation_pk']
+            )
+        return base_qs
 
     def perform_create(self, serializer):
-        # Handle both nested and flat creation
+        """Handle message creation with security checks"""
         if 'conversation_pk' in self.kwargs:
-            conversation_id = self.kwargs['conversation_pk']
             conversation = get_object_or_404(
                 Conversation,
-                pk=conversation_id,
+                pk=self.kwargs['conversation_pk'],
                 participants=self.request.user
             )
             serializer.save(conversation=conversation, sender=self.request.user)
