@@ -1,21 +1,38 @@
-# chats/permissions.py
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.permissions import BasePermission
+from rest_framework import status
+from django.http import HttpResponseForbidden
 from .models import Conversation, Message
 
-class IsParticipantOfConversation(IsAuthenticated):
-    
-    def has_object_permission(self, request, view, obj):
-        # First check if user is authenticated (parent class check)
-        if not super().has_permission(request, view):
+class IsParticipantOfConversation(BasePermission):
+    message = "You are not a participant of this conversation"
+    code = status.HTTP_403_FORBIDDEN
+
+    def has_permission(self, request, view):
+        # First check if user is authenticated
+        if not request.user.is_authenticated:
             return False
 
-        # Handle Conversation objects
+        # For list/create views, just require authentication
+        if view.action in ['list', 'create']:
+            return True
+
+        return True  # Object permission will be checked in has_object_permission
+
+    def has_object_permission(self, request, view, obj):
+        # Check conversation participation for all methods
         if isinstance(obj, Conversation):
-            return obj.participants.filter(id=request.user.id).exists()
-        
-        # Handle Message objects
+            is_participant = obj.participants.filter(id=request.user.id).exists()
         elif isinstance(obj, Message):
-            return obj.conversation.participants.filter(id=request.user.id).exists()
-        
-        # For list views or other objects, just require authentication
-        return True
+            is_participant = obj.conversation.participants.filter(id=request.user.id).exists()
+        else:
+            is_participant = False
+
+        # Special handling for different HTTP methods
+        if request.method in ['GET', 'HEAD', 'OPTIONS']:
+            return is_participant
+        elif request.method in ['PUT', 'PATCH', 'DELETE']:
+            # For modifications, ensure user is participant AND owns the message (if applicable)
+            if isinstance(obj, Message):
+                return is_participant and obj.sender == request.user
+            return is_participant
+        return False

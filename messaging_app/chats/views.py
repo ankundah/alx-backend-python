@@ -94,3 +94,26 @@ class MessageViewSet(viewsets.ModelViewSet):
             if not conversation.participants.filter(id=self.request.user.id).exists():
                 raise PermissionDenied("Not a conversation participant")
             serializer.save(sender=self.request.user)
+    
+    def destroy(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            self.perform_destroy(instance)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except PermissionDenied:
+            return Response(
+                {"detail": "You don't have permission to delete this message"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+    @action(detail=True, methods=['put', 'patch'])
+    def mark_as_read(self, request, pk=None):
+        message = self.get_object()
+        if not message.conversation.participants.filter(id=request.user.id).exists():
+            return Response(
+                {"detail": "You're not a participant in this conversation"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        message.read = True
+        message.save()
+        return Response({'status': 'message marked as read'})
