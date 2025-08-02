@@ -23,10 +23,10 @@ def get_message_thread(request, message_id):
         return JsonResponse({'error': 'Message not found'}, status=404)
 
 @login_required
-def unread_inbox(request):
+def unread_inbox_custom_manager(request):
     user = request.user
-    unread_messages = Message.unread.for_user(user)
-    
+    unread_messages = Message.unread.for_user(user) 
+
     data = [{
         "id": msg.id,
         "sender": msg.sender.username,
