@@ -21,3 +21,17 @@ def get_message_thread(request, message_id):
         return JsonResponse(thread, safe=False)
     except Message.DoesNotExist:
         return JsonResponse({'error': 'Message not found'}, status=404)
+
+@login_required
+def unread_inbox(request):
+    user = request.user
+    unread_messages = Message.unread.for_user(user)
+    
+    data = [{
+        "id": msg.id,
+        "sender": msg.sender.username,
+        "content": msg.content,
+        "timestamp": msg.timestamp,
+    } for msg in unread_messages]
+
+    return JsonResponse(data, safe=False)
