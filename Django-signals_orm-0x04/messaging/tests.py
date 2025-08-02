@@ -22,3 +22,13 @@ def test_edit_logs_history(self):
     self.assertEqual(history.count(), 1)
     self.assertEqual(history.first().previous_content, 'Hello')
     self.assertTrue(msg.edited)
+
+def test_user_deletion_cleans_up_data(self):
+    user = User.objects.create_user(username="testuser", password="testpass")
+    msg = Message.objects.create(sender=user, receiver=self.receiver, content="Test")
+    notif = Notification.objects.create(user=user, message=msg, content="Notify")
+
+    user.delete()
+
+    self.assertFalse(Message.objects.filter(sender=user).exists())
+    self.assertFalse(Notification.objects.filter(user=user).exists())
