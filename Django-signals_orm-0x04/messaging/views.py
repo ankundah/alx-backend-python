@@ -4,7 +4,9 @@ from django.contrib.auth import get_user_model
 from django.http import JsonResponse
 from .models import Message
 from .utils import build_thread  
+from django.views.decorators.cache import cache_page
 
+@cache_page(60)
 @login_required
 def delete_user(request):
     user = request.user
