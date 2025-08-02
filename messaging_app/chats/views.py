@@ -9,6 +9,8 @@ from django.contrib.auth import get_user_model
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from .permissions import IsParticipantOfConversation
+from django.views.decorators.cache import cache_page
+
 
 User = get_user_model()
 
@@ -34,6 +36,7 @@ class MessageFilter(filters.FilterSet):
         model = Message
         fields = ['conversation', 'sender']
 
+@cache_page(60)
 class ConversationViewSet(viewsets.ModelViewSet):
     serializer_class = ConversationSerializer
     permission_classes = [IsParticipantOfConversation] 
