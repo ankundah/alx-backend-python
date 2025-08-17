@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# Script: kubctl-0x01
+# Purpose: Scale Django app deployment, verify pods, load test, and monitor resources
+
+set -e  # exit immediately on error
+
+APP_NAME="messaging-app-deployment"
+
+echo "📌 Scaling $APP_NAME to 3 replicas..."
+kubectl scale deployment $APP_NAME --replicas=3
+
+echo "✅ Verifying pods..."
+kubectl get pods -l app=messaging-app
+
+echo "🔍 Checking services..."
+kubectl get svc messaging-app-service
+
+# Get service port (ClusterIP will be internal, so for wrk we need NodePort or port-forward)
+echo "🚀 Port-forwarding service to localhost:8000 for testing..."
+kubectl port-forward svc/messaging-app-service 8000:8000 &
+PF_PID=$!
+
+# Give port-forward a few seconds to start
+sleep 5
+
+echo "⚡ Running load test with wrk (10s, 2 threads, 10 connections)..."
+wrk -t2 -c10 -d10s http://127.0.0.1:8000/ || echo "wrk not installed! Install with: sudo apt install wrk"
+
+# Kill port-forward after test
+kill $PF_PID
+
+echo "📊 Monitoring resource usage (CPU/MEM)..."
+kubectl top pods
+
+echo "🎉 Done!"
