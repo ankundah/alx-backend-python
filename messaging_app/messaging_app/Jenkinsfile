@@ -14,7 +14,8 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 echo 'Pulling latest code from GitHub...'
-                git branch: 'main', url: 'https://github.com/ankundah/alx-backend-python.git'
+                git branch: 'main', url: 'https://github.com/ankundah/alx-backend-python.git',
+                credentialsId: 'github-creds'
             }
         }
 
@@ -37,7 +38,7 @@ pipeline {
                     ${PYTHON} -m venv ${VENV_DIR}
                     source ${VENV_DIR}/bin/activate
                     ${PIP} install --upgrade pip
-                    ${PIP} install -r requirements.txt
+                    ${PIP} install -r messaging_app/requirements.txt
                     ${PIP} install pytest pytest-html
                 """
             }
