@@ -1,0 +1,79 @@
+pipeline {
+    agent any
+
+    environment {
+        PROJECT_DIR = "messaging_app"
+        PYTHON = "python3"
+        PIP = "pip3"
+        VENV_DIR = "venv"
+        REPORTS_DIR = "reports"
+        TESTS_DIR = "tests"
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                echo 'Pulling latest code from GitHub...'
+                git branch: 'main', url: 'https://github.com/ankundah/alx-backend-python.git'
+            }
+        }
+
+        stage('Prepare Project Structure') {
+            steps {
+                echo 'Ensuring tests and reports directories exist...'
+                sh """
+                    cd ${PROJECT_DIR}
+                    mkdir -p ${REPORTS_DIR}
+                    mkdir -p ${TESTS_DIR}
+                """
+            }
+        }
+
+        stage('Set Up Python Environment') {
+            steps {
+                echo 'Creating virtual environment and installing dependencies...'
+                sh """
+                    cd ${PROJECT_DIR}
+                    ${PYTHON} -m venv ${VENV_DIR}
+                    source ${VENV_DIR}/bin/activate
+                    ${PIP} install --upgrade pip
+                    ${PIP} install -r requirements.txt
+                    ${PIP} install pytest pytest-html
+                """
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                echo 'Running pytest and generating HTML report...'
+                sh """
+                    cd ${PROJECT_DIR}
+                    source ${VENV_DIR}/bin/activate
+                    pytest --html=${REPORTS_DIR}/report.html --self-contained-html || true
+                """
+            }
+            post {
+                always {
+                    echo 'Publishing test results...'
+                    publishHTML([
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: "${PROJECT_DIR}/${REPORTS_DIR}",
+                        reportFiles: "report.html",
+                        reportName: "Pytest Report"
+                    ])
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully ✅'
+        }
+        failure {
+            echo 'Pipeline failed ❌ — check the Pytest Report'
+        }
+    }
+}
